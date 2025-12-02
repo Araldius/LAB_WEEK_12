@@ -8,34 +8,40 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.launch
+import java.util.Calendar
 
 class MovieViewModel(private val movieRepository: MovieRepository) : ViewModel() {
+
+    // Backing property for popular movies
+    private val _popularMovies = MutableStateFlow<List<Movie>>(emptyList())
+    val popularMovies: StateFlow<List<Movie>> = _popularMovies
+
+    // Backing property for error messages
+    private val _error = MutableStateFlow("")
+    val error: StateFlow<String> = _error
+
     init {
         fetchPopularMovies()
     }
 
-    // define the StateFlow in replace of the LiveData
-    // a StateFlow is an observable Flow that emits state updates to the collectors
-    // MutableStateFlow is a StateFlow that you can change the value
-    private val _popularMovies = MutableStateFlow(
-        emptyList<Movie>()
-    )
-    val popularMovies: StateFlow<List<Movie>> = _popularMovies
-    private val _error = MutableStateFlow("")
-    val error: StateFlow<String> = _error
-    // fetch movies from the API
     private fun fetchPopularMovies() {
-        // launch a coroutine in viewModelScope
-        // Dispatchers.IO means that this coroutine will run on a shared pool of threads
         viewModelScope.launch(Dispatchers.IO) {
-            movieRepository.fetchMovies().catch {
-                // catch is a terminal operator that catches exceptions from the Flow
-                _error.value = "An exception occurred: ${it.message}"
-            }.collect {
-                // collect is a terminal operator that collects the values from the Flow
-                // the results are emitted to the StateFlow
-                _popularMovies.value = it
-            }
+            movieRepository.fetchMovies()
+                .catch { exception ->
+                    _error.value = "An exception occurred: ${exception.message}"
+                }
+                .collect { movies ->
+                    // LOGIC FOR ASSIGNMENT (Commit 3):
+                    // Filter for current year and sort by descending popularity
+                    val currentYear = Calendar.getInstance().get(Calendar.YEAR).toString()
+
+                    val filteredAndSortedMovies = movies
+                        .filter { it.releaseDate?.startsWith(currentYear) == true }
+                        .sortedByDescending { it.popularity }
+
+                    // Update the StateFlow with the processed list
+                    _popularMovies.value = filteredAndSortedMovies
+                }
         }
     }
 }
